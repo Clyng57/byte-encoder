@@ -200,5 +200,3 @@ function isBuffer (byteView) {
     Buffer.isBuffer(byteView)
   )
 }
-
-console.log(new ByteEncoder().encodeToBuffer('Hello World!'))
