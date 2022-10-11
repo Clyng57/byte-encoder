@@ -3,7 +3,7 @@ import type ByteView from 'byteview'
 
 declare module 'byte-encoder'
 
-export class ByteEncoderIterator {
+declare class ByteEncoderIterator {
   #string: string
   #units: number
   #max: number
