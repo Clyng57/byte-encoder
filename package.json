@@ -1,0 +1,42 @@
+{
+  "name": "byte-encoder",
+  "version": "1.0.0",
+  "description": "Encode data to utf8 bytes. Browser or NodeJS.",
+  "type": "module",
+  "author": "Cal Young",
+  "keywords": [
+    "arraybuffer",
+    "browser",
+    "byte-encoder",
+    "bytes",
+    "byteview",
+    "uint8array",
+    "nodejs",
+    "encoder",
+    "text-encoder",
+    "javascript",
+    "module",
+    "node",
+    "es6"
+  ],
+  "main": "./index.js",
+  "types": "./types/index.d.ts",
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.17.0",
+    "standard": "^16.0.4"
+  },
+  "dependencies": {
+    "byteview": "^1.0.2"
+  },
+  "babel": {
+    "targets": {
+      "node": "16"
+    }
+  },
+  "standard": {
+    "parser": "@babel/eslint-parser",
+    "ignore": [
+      "/types"
+    ]
+  }
+}
