@@ -38,8 +38,6 @@ export default class ByteEncoder {
 
   get encoding (): string
 
-  encodeToBuffer (string: string): ArrayBufferLike
-
   encode (string: string): ByteView
 
   encodeInto (
