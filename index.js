@@ -163,10 +163,6 @@ export default class ByteEncoder {
     return this.#encoding
   }
 
-  encodeToBuffer (string = '') {
-    return new ByteView(new ByteEncoderIterator(string)).buffer
-  }
-
   encode (string = '') {
     return new ByteView(new ByteEncoderIterator(string))
   }
