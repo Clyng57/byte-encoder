@@ -33,6 +33,7 @@ export default class ByteEncoder {
   #encoding: string
 
   static Iterator = ByteEncoderIterator
+  static encode (string: string): ByteView
 
   constructor ()
 
