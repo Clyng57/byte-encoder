@@ -77,17 +77,3 @@ console.log(byteEncoder.encodeInto('Hello World!', byteView))
 console.log(byteView)
 // prints: ByteView(12) [72, 101, 108, 108, 111, 32,  87, 111, 114, 108, 100, 33]
 ```
-
-
-### (method) `ByteEncoder.encodeToBuffer`:
-
-Args [`string: string`]
-
-```js
-import ByteEncoder from 'byte-encoder'
-
-const byteEncoder = new ByteEncoder()
-
-console.log(byteEncoder.encodeToBuffer('Hello World!'))
-// prints: ArrayBuffer { [Uint8Contents]: <48 65 6c 6c 6f 20 57 6f 72 6c 64 21>, byteLength: 12 }
-```
