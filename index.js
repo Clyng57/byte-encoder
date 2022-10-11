@@ -155,7 +155,11 @@ export default class ByteEncoder {
 
   static Iterator = ByteEncoderIterator
 
-  constructor () {
+  static encode (string = '') {
+    return new ByteView(new ByteEncoderIterator(string))
+  }
+
+  constructor (string) {
     this.#encoding = 'utf-8'
   }
 
