@@ -1,6 +1,6 @@
 {
   "name": "byte-encoder",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Encode data to utf8 bytes. Browser or NodeJS.",
   "type": "module",
   "author": "Cal Young",
