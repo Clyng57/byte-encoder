@@ -13,6 +13,7 @@ declare class ByteEncoderIterator {
   #codePoint: null | number
   #componentError: [0xEF, 0xBF, 0xBD]
   #read: number
+  #written: number
 
   constructor (string: string, units?: number)
 
@@ -21,19 +22,15 @@ declare class ByteEncoderIterator {
   }
 
   get read (): number
+  get written (): number
 
-  [Symbol.iterator] () {
-    return this
-  }
-
-  next (): { value: number | undefined, done: boolean }
+  * [Symbol.iterator] (): Generator<number, void, undefined>
 }
 
 export default class ByteEncoder {
   #encoding: string
 
   static Iterator = ByteEncoderIterator
-  static encode (string: string): ByteView
 
   constructor ()
 
