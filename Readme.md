@@ -44,18 +44,6 @@ console.log(ByteView.from(chunks))
 ```
 
 
-### static (method) `ByteEncoder.encode`:
-
-Args [`string: string`]
-
-```js
-import ByteEncoder from 'byte-encoder'
-
-console.log(ByteEncoder.encode('Hello World!'))
-// prints: ByteView(12) [72, 101, 108, 108, 111, 32,  87, 111, 114, 108, 100, 33]
-```
-
-
 ### (method) `ByteEncoder.encode`:
 
 Args [`string: string`]
