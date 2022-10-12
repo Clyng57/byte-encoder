@@ -1,38 +1,16 @@
 
 import ByteView from 'byteview'
 
-export class ByteEncoderIterator {
+class ByteEncoderIterator {
   #string
-  #units
-  #max
-  #index
-  #component = []
-  #leadSurrogate = null
-  #codePoint = null
-  #componentError = [0xEF, 0xBF, 0xBD]
   #read = 0
+  #written = 0
 
-  constructor (string, units) {
+  constructor (string = '') {
     if (typeof string !== 'string') {
       throw new TypeError('Expected typeof "string". Recieved typeof: "' + typeof string + '"')
     }
     this.#string = string
-    this.#units = units || Infinity
-    this.#max = string.length
-    this.#index = -1
-    this.next = this.next.bind(this)
-  }
-
-  /**
-   *
-   * @returns {ArrayBuffer}
-   */
-  get buffer () {
-    return new ByteView(this).buffer
-  }
-
-  static encode (string = '') {
-    return new ByteView(new ByteEncoderIterator(string))
   }
 
   get [Symbol.toStringTag] () {
@@ -43,110 +21,90 @@ export class ByteEncoderIterator {
     return this.#read
   }
 
-  [Symbol.iterator] () {
-    return this
+  get written () {
+    return this.#written
   }
 
-  next () {
-    const result = { value: null, done: false }
-    if (this.#component && Array.isArray(this.#component) && this.#component.length) {
-      result.value = this.#component[0]
-      this.#component = this.#component.length > 1 ? this.#component.slice(1) : null
-      return result
-    }
-    ++this.#index
-    // done
-    if (this.#index >= this.#max) {
-      return { value: undefined, done: true }
-    }
-    this.#codePoint = this.#string.charCodeAt(this.#index)
-    // is surrogate component
-    if (this.#codePoint > 0xD7FF && this.#codePoint < 0xE000) {
-      // last char was a lead
-      if (!this.#leadSurrogate) {
-        // no lead yet
-        if (this.#codePoint > 0xDBFF) {
-          // unexpected trail
-          if ((this.#units -= 3) > -1) {
-            this.#component ? this.#component.push(this.#componentError) : this.#component = this.#componentError
-            ++this.#read
-            return this.next()
+  * [Symbol.iterator] () {
+    let index = -1
+    let leadSurrogate = null
+    const { length } = this.#string
+    this.#read = 0
+    this.#written = 0
+
+    while (++index < length) {
+      let codePoint = this.#string.charCodeAt(index)
+      ++this.#read
+      // is surrogate component
+      if (codePoint > 0xD7FF && codePoint < 0xE000) {
+        // if last char was not a lead
+        if (leadSurrogate === null) {
+          // no lead yet
+          if (codePoint > 0xDBFF) {
+            // unexpected trail
+            this.#written += 3
+            yield * [0xEF, 0xBF, 0xBD]
+            continue
+          } else if (index + 1 === length) {
+            // unpaired lead
+            this.#written += 3
+            yield * [0xEF, 0xBF, 0xBD]
+            continue
           }
-          return this.next()
-        } else if (this.#index + 1 === this.#max) {
-          // unpaired lead
-          if ((this.#units -= 3) > -1) {
-            this.#component ? this.#component.push(this.#componentError) : this.#component = this.#componentError
-            ++this.#read
-            return this.next()
-          }
-          return this.next()
+
+          // valid lead
+          leadSurrogate = codePoint
+
+          continue
         }
 
-        // valid lead
-        this.#leadSurrogate = this.#codePoint
-
-        return this.next()
-      }
-
-      // 2 leads in a row
-      if (this.#codePoint < 0xDC00) {
-        if ((this.#units -= 3) > -1) {
-          this.#component ? this.#component.push(this.#componentError) : this.#component = this.#componentError
-          return this.next()
+        // 2 leads in a row
+        if (codePoint < 0xDC00) {
+          this.#written += 3
+          yield * [0xEF, 0xBF, 0xBD]
+          leadSurrogate = codePoint
+          continue
         }
-        this.#leadSurrogate = this.#codePoint
-        return this.next()
-      }
 
-      // valid surrogate pair
-      this.#codePoint = (this.#leadSurrogate - 0xD800 << 10 | this.#codePoint - 0xDC00) + 0x10000
-    } else if (this.#leadSurrogate) {
-      // valid bmp char, but last char was a lead
-      if ((this.#units -= 3) > -1) {
-        this.#component ? this.#component.push(this.#componentError) : this.#component = this.#componentError
-        return this.next()
+        // valid surrogate pair
+        codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
+      } else if (leadSurrogate) {
+        // valid bmp char, but last char was a lead
+        this.#written += 3
+        yield * [0xEF, 0xBF, 0xBD]
+        continue
+      }
+      leadSurrogate = null
+
+      // encode utf8
+      if (codePoint < 0x80) {
+        ++this.#written
+        yield codePoint
+      } else if (codePoint < 0x800) {
+        this.#written += 2
+        yield * [
+          codePoint >> 0x6 | 0xC0,
+          codePoint & 0x3F | 0x80
+        ]
+      } else if (codePoint < 0x10000) {
+        this.#written += 3
+        yield * [
+          codePoint >> 0xC | 0xE0,
+          codePoint >> 0x6 & 0x3F | 0x80,
+          codePoint & 0x3F | 0x80
+        ]
+      } else if (codePoint < 0x110000) {
+        this.#written += 4
+        yield * [
+          codePoint >> 0x12 | 0xF0,
+          codePoint >> 0xC & 0x3F | 0x80,
+          codePoint >> 0x6 & 0x3F | 0x80,
+          codePoint & 0x3F | 0x80
+        ]
+      } else {
+        throw new Error('Invalid code point')
       }
     }
-    this.#leadSurrogate = null
-
-    // encode utf8
-    if (this.#codePoint < 0x80) {
-      if ((this.#units -= 1) < 0) return { value: undefined, done: true }
-      ++this.#read
-      result.value = this.#codePoint
-    } else if (this.#codePoint < 0x800) {
-      if ((this.#units -= 2) < 0) return { value: undefined, done: true }
-      ++this.#read
-      this.#component = [
-        this.#codePoint >> 0x6 | 0xC0,
-        this.#codePoint & 0x3F | 0x80
-      ]
-      return this.next()
-    } else if (this.#codePoint < 0x10000) {
-      if ((this.#units -= 3) < 0) return { value: undefined, done: true }
-      ++this.#read
-      this.#component = [
-        this.#codePoint >> 0xC | 0xE0,
-        this.#codePoint >> 0x6 & 0x3F | 0x80,
-        this.#codePoint & 0x3F | 0x80
-      ]
-      return this.next()
-    } else if (this.#codePoint < 0x110000) {
-      if ((this.#units -= 4) < 0) return { value: undefined, done: true }
-      ++this.#read
-      this.#component = [
-        this.#codePoint >> 0x12 | 0xF0,
-        this.#codePoint >> 0xC & 0x3F | 0x80,
-        this.#codePoint >> 0x6 & 0x3F | 0x80,
-        this.#codePoint & 0x3F | 0x80
-      ]
-      return this.next()
-    } else {
-      throw new Error('Invalid code point')
-    }
-
-    return result
   }
 }
 
@@ -155,11 +113,7 @@ export default class ByteEncoder {
 
   static Iterator = ByteEncoderIterator
 
-  static encode (string = '') {
-    return new ByteView(new ByteEncoderIterator(string))
-  }
-
-  constructor (string) {
+  constructor () {
     this.#encoding = 'utf-8'
   }
 
@@ -167,29 +121,290 @@ export default class ByteEncoder {
     return this.#encoding
   }
 
+  /**
+   *
+   * @param {string} string
+   * @returns {ByteView}
+   */
   encode (string = '') {
-    return new ByteView(new ByteEncoderIterator(string))
+    if (typeof string !== 'string') {
+      throw new TypeError('Expected type "string". Recieved type: "' + typeof string + '"')
+    }
+    let index = -1
+    let leadSurrogate = null
+    const { length } = string
+    const optimisticLength = length * 2 + 5
+    let byteView = new ByteView(optimisticLength)
+    let read = 0
+    let written = 0
+    let offset = -1
+
+    while (++index < length) {
+      let codePoint = string.charCodeAt(index)
+      ++read
+      // is surrogate component
+      if (codePoint > 0xD7FF && codePoint < 0xE000) {
+        // if last char was not a lead
+        if (leadSurrogate === null) {
+          // no lead yet
+          if (codePoint > 0xDBFF) {
+            // unexpected trail
+            if (written + 3 >= byteView.length) {
+              // reallocate ByteView
+              byteView = ByteView.concat(
+                [byteView],
+                written + (length - (read - 1)) * 3
+              )
+            }
+            byteView[++offset] = 0xEF
+            byteView[++offset] = 0xBF
+            byteView[++offset] = 0xBD
+            written += 3
+            continue
+          } else if (index + 1 === length) {
+            // unpaired lead
+            if (written + 3 >= byteView.length) {
+              // reallocate ByteView
+              byteView = ByteView.concat(
+                [byteView],
+                written + (length - (read - 1)) * 3
+              )
+            }
+            byteView[++offset] = 0xEF
+            byteView[++offset] = 0xBF
+            byteView[++offset] = 0xBD
+            written += 3
+            continue
+          }
+
+          // valid lead
+          leadSurrogate = codePoint
+
+          continue
+        }
+
+        // 2 leads in a row
+        if (codePoint < 0xDC00) {
+          if (written + 3 >= byteView.length) {
+            // reallocate ByteView
+            byteView = ByteView.concat(
+              [byteView],
+              written + (length - (read - 1)) * 3
+            )
+          }
+          byteView[++offset] = 0xEF
+          byteView[++offset] = 0xBF
+          byteView[++offset] = 0xBD
+          written += 3
+          leadSurrogate = codePoint
+          continue
+        }
+
+        // valid surrogate pair
+        codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
+      } else if (leadSurrogate) {
+        // valid bmp char, but last char was a lead
+        if (written + 3 >= byteView.length) {
+          // reallocate ByteView
+          byteView = ByteView.concat(
+            [byteView],
+            written + (length - (read - 1)) * 3
+          )
+        }
+        byteView[++offset] = 0xEF
+        byteView[++offset] = 0xBF
+        byteView[++offset] = 0xBD
+        written += 3
+        continue
+      }
+      leadSurrogate = null
+
+      // encode utf8
+      if (codePoint < 0x80) {
+        if (written + 1 >= byteView.length) {
+          // reallocate ByteView
+          byteView = ByteView.concat(
+            [byteView],
+            written + (length - (read - 1)) * 3
+          )
+        }
+        byteView[++offset] = codePoint
+        written += 1
+      } else if (codePoint < 0x800) {
+        if (written + 2 >= byteView.length) {
+          // reallocate ByteView
+          byteView = ByteView.concat(
+            [byteView],
+            written + (length - (read - 1)) * 3
+          )
+        }
+        byteView[++offset] = codePoint >> 0x6 | 0xC0
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 2
+      } else if (codePoint < 0x10000) {
+        if (written + 3 >= byteView.length) {
+          // reallocate ByteView
+          byteView = ByteView.concat(
+            [byteView],
+            written + (length - (read - 1)) * 3
+          )
+        }
+        byteView[++offset] = codePoint >> 0xC | 0xE0
+        byteView[++offset] = codePoint >> 0x6 & 0x3F | 0x80
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 3
+      } else if (codePoint < 0x110000) {
+        if (written + 4 >= byteView.length) {
+          // reallocate ByteView
+          byteView = ByteView.concat(
+            [byteView],
+            written + (length - (read - 1)) * 3
+          )
+        }
+        byteView[++offset] = codePoint >> 0x12 | 0xF0
+        byteView[++offset] = codePoint >> 0xC & 0x3F | 0x80
+        byteView[++offset] = codePoint >> 0x6 & 0x3F | 0x80
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 4
+      } else {
+        throw new Error('Invalid code point')
+      }
+    }
+    return byteView.slice(0, written)
   }
 
+  /**
+   *
+   * @param {string} string
+   * @param {ByteView | ArrayBufferView} byteView
+   * @returns {{ written: number, read: number }}
+   */
   encodeInto (string, byteView) {
+    if (typeof string !== 'string') {
+      throw new TypeError('Expected type "string". Recieved type: "' + typeof string + '"')
+    }
     if (!ByteView.isByteView(byteView) && !ByteView.isView(byteView) && !isBuffer(byteView)) {
       throw new TypeError('Expected instance of "ByteView | TypedArray | Buffer"')
     }
-    let bvIndex = -1
-    const { length } = byteView
-    const textEncoder = new ByteEncoderIterator(string)
-    let result = textEncoder.next()
+    let index = -1
+    let leadSurrogate = null
+    const { length } = string
+    const max = byteView.length
+    let read = 0
+    let written = 0
+    let offset = -1
 
-    while (result.done !== true) {
-      if ((bvIndex + 1) > length) break
-      byteView[++bvIndex] = result.value
-      result = textEncoder.next()
-    }
+    while (++index < length) {
+      let codePoint = string.charCodeAt(index)
+      if (written + 1 >= max) {
+        return { written, read }
+      }
+      ++read
+      // is surrogate component
+      if (codePoint > 0xD7FF && codePoint < 0xE000) {
+        // if last char was not a lead
+        if (leadSurrogate === null) {
+          // no lead yet
+          if (codePoint > 0xDBFF) {
+            // unexpected trail
+            if (written + 3 >= max) {
+              --read
+              return { written, read }
+            }
+            byteView[++offset] = 0xEF
+            byteView[++offset] = 0xBF
+            byteView[++offset] = 0xBD
+            written += 3
+            continue
+          } else if (index + 1 === length) {
+            // unpaired lead
+            if (written + 3 >= max) {
+              --read
+              return { written, read }
+            }
+            byteView[++offset] = 0xEF
+            byteView[++offset] = 0xBF
+            byteView[++offset] = 0xBD
+            written += 3
+            continue
+          }
 
-    return {
-      read: textEncoder.read,
-      written: bvIndex + 1
+          // valid lead
+          leadSurrogate = codePoint
+
+          continue
+        }
+
+        // 2 leads in a row
+        if (codePoint < 0xDC00) {
+          if (written + 3 >= max) {
+            --read
+            return { written, read }
+          }
+          byteView[++offset] = 0xEF
+          byteView[++offset] = 0xBF
+          byteView[++offset] = 0xBD
+          written += 3
+          leadSurrogate = codePoint
+          continue
+        }
+
+        // valid surrogate pair
+        codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
+      } else if (leadSurrogate) {
+        // valid bmp char, but last char was a lead
+        if (written + 3 >= max) {
+          --read
+          return { written, read }
+        }
+        byteView[++offset] = 0xEF
+        byteView[++offset] = 0xBF
+        byteView[++offset] = 0xBD
+        written += 3
+        continue
+      }
+      leadSurrogate = null
+
+      // encode utf8
+      if (codePoint < 0x80) {
+        if (written + 1 >= max) {
+          --read
+          return { written, read }
+        }
+        byteView[++offset] = codePoint
+        written += 1
+      } else if (codePoint < 0x800) {
+        if (written + 2 >= max) {
+          --read
+          return { written, read }
+        }
+        byteView[++offset] = codePoint >> 0x6 | 0xC0
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 2
+      } else if (codePoint < 0x10000) {
+        if (written + 3 >= max) {
+          --read
+          return { written, read }
+        }
+        byteView[++offset] = codePoint >> 0xC | 0xE0
+        byteView[++offset] = codePoint >> 0x6 & 0x3F | 0x80
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 3
+      } else if (codePoint < 0x110000) {
+        if (written + 4 >= max) {
+          --read
+          return { written, read }
+        }
+        byteView[++offset] = codePoint >> 0x12 | 0xF0
+        byteView[++offset] = codePoint >> 0xC & 0x3F | 0x80
+        byteView[++offset] = codePoint >> 0x6 & 0x3F | 0x80
+        byteView[++offset] = codePoint & 0x3F | 0x80
+        written += 4
+      } else {
+        throw new Error('Invalid code point')
+      }
     }
+    return { written, read }
   }
 }
 
